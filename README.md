@@ -1,7 +1,5 @@
 # CI/CD Pipeline Health Dashboard
 
-> **🎥 Demo Video**: [Watch 8-minute demonstration](YOUR_VIDEO_LINK_HERE) showing complete setup and real-time pipeline monitoring
-
 A production-ready dashboard to **monitor CI/CD pipelines** from GitHub Actions and Jenkins with real-time metrics, alerting, and containerized deployment.
 
 ## 🚀 Quick Start (2 minutes setup)
@@ -60,6 +58,151 @@ curl -X POST http://localhost:8001/ingest/github \
 - ✅ **Fully containerized** with Docker for consistent deployment
 - ✅ **Production-ready** with health checks, security hardening, and proper documentation
 
+## 🧱 Tech Stack
+
+- **Backend**: FastAPI (Python), SQLAlchemy ORM, SQLite database, WebSocket broadcasting
+- **Frontend**: React 18 + Vite, Recharts for visualization, Tailwind CSS
+- **Containerization**: Docker multi-stage builds, Docker Compose orchestration
+- **Collectors**: Webhook endpoints + optional polling scripts
+- **Alerts**: Slack webhooks and SMTP email notifications
+- **Infrastructure**: Health checks, volume persistence, security hardening
+
+## 🎯 For Evaluators - Quick Verification
+
+### ✅ Verify Complete Setup (< 3 minutes)
+```bash
+# 1. Health checks
+curl http://localhost:8001/health
+curl http://localhost:5173
+
+# 2. Test API endpoints
+curl http://localhost:8001/builds
+curl http://localhost:8001/metrics/summary
+
+# 3. Test real-time ingestion
+curl -X POST http://localhost:8001/ingest/jenkins \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pipeline": "evaluation-test",
+    "repo": "test/repo",
+    "branch": "main", 
+    "status": "failure",
+    "started_at": "2025-08-25T10:00:00Z",
+    "completed_at": "2025-08-25T10:03:00Z",
+    "duration_seconds": 180
+  }'
+
+# 4. Verify WebSocket updates (dashboard should show new build instantly)
+```
+
+### 📋 Evaluation Checklist
+- [ ] **Containers Start**: `docker-compose up -d` succeeds
+- [ ] **Health Checks**: Both backend and frontend respond
+- [ ] **API Functionality**: REST endpoints return valid data
+- [ ] **Real-time Updates**: Dashboard updates without refresh
+- [ ] **Multi-provider**: Both GitHub and Jenkins ingestion work
+- [ ] **Documentation**: README provides clear setup instructions
+- [ ] **Production Ready**: Docker deployment with health checks
+
+## 🏗️ Architecture Summary
+
+### System Overview
+```
+┌─────────────────┐    webhook/poll    ┌─────────────────┐
+│ GitHub Actions  │ ────────────────▶  │   FastAPI       │
+│     Jenkins     │                    │   Backend       │
+└─────────────────┘                    │   (Port 8001)   │
+                                       └─────────┬───────┘
+                                                 │
+                ┌─────────────────┐             │ REST API
+                │   SQLite DB     │ ◀───────────┤
+                │  (Persistent)   │             │
+                └─────────────────┘             │
+                                                │
+┌─────────────────┐    WebSocket           ┌────▼────────────┐
+│ React Frontend  │ ◀──────────────────────│  WebSocket      │
+│  (Port 5173)    │                        │  Broadcasting   │
+└─────────────────┘                        └─────────────────┘
+                                                │
+                                           ┌────▼────────────┐
+                                           │    Alerting     │
+                                           │ (Slack/Email)   │
+                                           └─────────────────┘
+```
+
+### Key Components
+- **Backend**: FastAPI with SQLAlchemy ORM, SQLite database, WebSocket broadcasting
+- **Frontend**: React with real-time updates and interactive charts
+- **Database**: SQLite with volume persistence across container restarts
+- **Alerts**: Slack and email notifications on build failures
+- **Deployment**: Docker containers with health checks and orchestration
+
+## 🤖 How AI Tools Were Used
+
+This project extensively leveraged AI tools (GPT-4, GitHub Copilot, Cursor) for design, implementation, and optimization:
+
+### Key AI Contributions
+- **Architecture Design**: System overview, API design patterns, technology stack selection
+- **Code Generation**: FastAPI endpoints, React components, Docker configurations
+- **Problem Solving**: WebSocket integration, container networking, error handling patterns
+- **Documentation**: Technical specifications, setup guides, and API documentation
+
+### Example AI Interactions
+1. *"Design a FastAPI backend with SQLAlchemy for CI/CD build data with WebSocket broadcasting"*
+2. *"Create a React dashboard with real-time updates and Recharts visualization"*
+3. *"Implement Docker multi-stage builds with health checks for production deployment"*
+
+The AI tools accelerated development by providing boilerplate code, architectural patterns, and solutions to technical challenges, while human oversight ensured production readiness and proper integration.
+
+## 📚 Key Learnings and Assumptions
+
+### Technical Learnings
+- **Containerization**: Multi-stage builds, health checks, and volume persistence are essential
+- **Real-time Architecture**: WebSocket server-push provides better UX than client polling
+- **API Design**: Flexible schemas accommodate different CI/CD provider data formats
+- **State Management**: React hooks with proper cleanup for WebSocket connections
+
+### Project Assumptions
+- **Deployment**: Single-node with SQLite (PostgreSQL for multi-instance scaling)
+- **Security**: Internal network deployment with basic authentication
+- **Data**: Daily/weekly metrics granularity sufficient for most use cases
+- **Integration**: Simple webhook patterns preferred over complex API authentication
+
+---
+
+**🎉 The CI/CD Pipeline Health Dashboard is ready for production deployment!**
+
+This containerized solution provides comprehensive monitoring for your CI/CD pipelines with real-time updates, alerting, and a modern user interface.
+
+## 🚀 Features
+
+- ✅ **Real-time data collection** from multiple CI/CD providers (GitHub Actions, Jenkins)
+- ✅ **Live metrics dashboard** with success/failure rates and build times
+- ✅ **WebSocket-powered updates** for instant dashboard refreshes
+- ✅ **Alerting system** with Slack and email notifications on failures
+- ✅ **Modern React UI** with interactive charts and responsive design
+- ✅ **Fully containerized** with Docker for consistent deployment
+- ✅ **Production-ready** with health checks, security hardening, and proper documentation
+
+## 🧱 Tech Stack
+
+- **Backend**: FastAPI (Python), SQLAlchemy ORM, SQLite database, WebSocket broadcasting
+- **Frontend**: React 18 + Vite, Recharts for visualization, Tailwind CSS
+- **Containerization**: Docker multi-stage builds, Docker Compose orchestration
+- **Collectors**: Webhook endpoints + optional polling scripts
+- **Alerts**: Slack webhooks and SMTP email notifications
+- **Infrastructure**: Health checks, volume persistence, security hardening
+
+## 🚀 Features
+
+- ✅ **Real-time data collection** from multiple CI/CD providers (GitHub Actions, Jenkins)
+- ✅ **Live metrics dashboard** with success/failure rates and build times
+- ✅ **WebSocket-powered updates** for instant dashboard refreshes
+- ✅ **Alerting system** with Slack and email notifications on failures
+- ✅ **Modern React UI** with interactive charts and responsive design
+- ✅ **Fully containerized** with Docker for consistent deployment
+- ✅ **Production-ready** with health checks, security hardening, and proper documentation
+
 > **Status: ✅ FULLY IMPLEMENTED & CONTAINERIZED** - Complete system ready for production deployment
 
 ## 🧱 Tech Stack
@@ -93,6 +236,8 @@ A production-style dashboard to **monitor CI/CD pipelines** (GitHub Actions or J
 
 ## 🎯 For Evaluators - Quick Verification
 
+## 🎯 For Evaluators - Quick Verification
+
 ### ✅ Verify Complete Setup (< 3 minutes)
 ```bash
 # 1. Health checks
@@ -118,6 +263,51 @@ curl -X POST http://localhost:8001/ingest/jenkins \
 
 # 4. Verify WebSocket updates (dashboard should show new build instantly)
 ```
+
+### 📋 Evaluation Checklist
+- [ ] **Containers Start**: `docker-compose up -d` succeeds
+- [ ] **Health Checks**: Both backend and frontend respond
+- [ ] **API Functionality**: REST endpoints return valid data
+- [ ] **Real-time Updates**: Dashboard updates without refresh
+- [ ] **Multi-provider**: Both GitHub and Jenkins ingestion work
+- [ ] **Documentation**: README provides clear setup instructions
+- [ ] **Production Ready**: Docker deployment with health checks
+
+## 🏗️ Architecture Summary
+
+The CI/CD Pipeline Health Dashboard follows a modern microservices architecture with containerized deployment:
+
+### System Overview
+```
+┌─────────────────┐    webhook/poll    ┌─────────────────┐
+│ GitHub Actions  │ ────────────────▶  │   FastAPI       │
+│     Jenkins     │                    │   Backend       │
+└─────────────────┘                    │   (Port 8001)   │
+                                       └─────────┬───────┘
+                                                 │
+                ┌─────────────────┐             │ REST API
+                │   SQLite DB     │ ◀───────────┤
+                │  (Persistent)   │             │
+                └─────────────────┘             │
+                                                │
+┌─────────────────┐    WebSocket           ┌────▼────────────┐
+│ React Frontend  │ ◀──────────────────────│  WebSocket      │
+│  (Port 5173)    │                        │  Broadcasting   │
+└─────────────────┘                        └─────────────────┘
+                                                │
+                                           ┌────▼────────────┐
+                                           │    Alerting     │
+                                           │ (Slack/Email)   │
+                                           └─────────────────┘
+```
+
+### Key Components
+- **Backend**: FastAPI with SQLAlchemy ORM, SQLite database, WebSocket broadcasting
+- **Frontend**: React with real-time updates and interactive charts
+- **Database**: SQLite with volume persistence across container restarts
+- **Alerts**: Slack and email notifications on build failures
+- **Deployment**: Docker containers with health checks and orchestration
+
 
 ### 📋 Evaluation Checklist
 - [ ] **Containers Start**: `docker-compose up -d` succeeds
