@@ -157,6 +157,96 @@ async def websocket_endpoint(ws: WebSocket):
     finally:
         manager.disconnect(ws)
 
+@app.post("/webhook/jenkins")
+async def webhook_jenkins(payload: dict, db: Session = Depends(get_db)):
+    """Handle Jenkins webhook payloads"""
+    try:
+        # Extract data from Jenkins webhook format
+        workflow_run = payload.get("workflow_run", {})
+        repo_info = payload.get("repository", {})
+        
+        # Map Jenkins data to our internal format
+        ingest_data = IngestRequest(
+            pipeline=workflow_run.get("name", "unknown"),
+            repo=repo_info.get("full_name", "unknown"),
+            branch="main",  # Jenkins webhooks might not have branch info
+            status="success" if workflow_run.get("conclusion") == "success" else "failure",
+            started_at=datetime.fromisoformat(workflow_run.get("created_at", datetime.now(timezone.utc).isoformat()).replace("Z", "+00:00")),
+            completed_at=datetime.fromisoformat(workflow_run.get("updated_at", datetime.now(timezone.utc).isoformat()).replace("Z", "+00:00")),
+            url=workflow_run.get("html_url"),
+            logs=f"Jenkins build #{workflow_run.get('run_number', 'unknown')}"
+        )
+        
+        # Persist the build
+        build = _persist(db, "jenkins", ingest_data)
+        
+        if build.status == "failure":
+            alert_failure(build.pipeline, build.repo, build.url or "", build.logs or "")
+        
+        # Broadcast real-time update
+        await manager.broadcast({
+            "event": "build_ingested",
+            "data": {
+                "pipeline": build.pipeline,
+                "repo": build.repo,
+                "status": build.status,
+                "provider": build.provider
+            }
+        })
+        
+        return {"status": "success", "message": "Jenkins webhook processed"}
+        
+    except Exception as e:
+        print(f"Error processing Jenkins webhook: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/webhook/github")
+async def webhook_github(payload: dict, db: Session = Depends(get_db)):
+    """Handle GitHub Actions webhook payloads"""
+    try:
+        # Extract data from GitHub webhook format
+        workflow_run = payload.get("workflow_run", {})
+        repo_info = payload.get("repository", {})
+        
+        # Only process completed workflows
+        if payload.get("action") != "completed":
+            return {"status": "ignored", "message": "Only processing completed workflows"}
+        
+        # Map GitHub data to our internal format
+        ingest_data = IngestRequest(
+            pipeline=workflow_run.get("name", "unknown"),
+            repo=repo_info.get("full_name", "unknown"),
+            branch=workflow_run.get("head_branch", "main"),
+            status="success" if workflow_run.get("conclusion") == "success" else "failure",
+            started_at=datetime.fromisoformat(workflow_run.get("created_at", datetime.now(timezone.utc).isoformat()).replace("Z", "+00:00")),
+            completed_at=datetime.fromisoformat(workflow_run.get("updated_at", datetime.now(timezone.utc).isoformat()).replace("Z", "+00:00")),
+            url=workflow_run.get("html_url"),
+            logs=f"GitHub Actions run #{workflow_run.get('run_number', 'unknown')}"
+        )
+        
+        # Persist the build
+        build = _persist(db, "github", ingest_data)
+        
+        if build.status == "failure":
+            alert_failure(build.pipeline, build.repo, build.url or "", build.logs or "")
+        
+        # Broadcast real-time update
+        await manager.broadcast({
+            "event": "build_ingested",
+            "data": {
+                "pipeline": build.pipeline,
+                "repo": build.repo,
+                "status": build.status,
+                "provider": build.provider
+            }
+        })
+        
+        return {"status": "success", "message": "GitHub webhook processed"}
+        
+    except Exception as e:
+        print(f"Error processing GitHub webhook: {e}")
+        return {"status": "error", "message": str(e)}
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint for container monitoring"""
