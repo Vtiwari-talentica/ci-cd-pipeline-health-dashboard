@@ -2,8 +2,10 @@ pipeline {
     agent any
     
     environment {
+        // Try multiple possible URLs for reaching the dashboard
         DASHBOARD_WEBHOOK_URL = 'http://localhost:8001/webhook/jenkins'
-        // Since Jenkins is running locally (not in Docker), use localhost
+        FALLBACK_WEBHOOK_URL = 'http://host.docker.internal:8001/webhook/jenkins'
+        DOCKER_BRIDGE_URL = 'http://172.17.0.1:8001/webhook/jenkins'
         BUILD_NAME = "${env.JOB_NAME}"
         BUILD_ID = "${env.BUILD_NUMBER}"
         REPO_NAME = "Vtiwari-talentica/ci-cd-pipeline-health-dashboard"
@@ -121,22 +123,39 @@ pipeline {
                 echo "Webhook URL: ${DASHBOARD_WEBHOOK_URL}"
                 echo "Payload: ${jsonPayload}"
                 
-                try {
-                    def response = sh(
-                        script: """
-                            curl -X POST '${DASHBOARD_WEBHOOK_URL}' \\
-                            -H 'Content-Type: application/json' \\
-                            -d '${jsonPayload}' \\
-                            --connect-timeout 10 \\
-                            --max-time 30
-                        """,
-                        returnStdout: true
-                    ).trim()
+                // Try multiple URLs to reach the dashboard
+                def webhookUrls = [
+                    "${DASHBOARD_WEBHOOK_URL}",
+                    "${FALLBACK_WEBHOOK_URL}", 
+                    "${DOCKER_BRIDGE_URL}"
+                ]
+                
+                def webhookSent = false
+                for (url in webhookUrls) {
+                    if (webhookSent) break
                     
-                    echo "✅ Webhook sent successfully: ${response}"
-                } catch (Exception e) {
-                    echo "⚠️  Webhook failed: ${e.getMessage()}"
-                    echo "Dashboard might not be running or webhook URL incorrect"
+                    try {
+                        echo "Trying webhook URL: ${url}"
+                        def response = sh(
+                            script: """
+                                curl -X POST '${url}' \\
+                                -H 'Content-Type: application/json' \\
+                                -d '${jsonPayload}' \\
+                                --connect-timeout 5 \\
+                                --max-time 10
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        echo "✅ Webhook sent successfully via ${url}: ${response}"
+                        webhookSent = true
+                    } catch (Exception e) {
+                        echo "⚠️ Webhook failed with ${url}: ${e.getMessage()}"
+                    }
+                }
+                
+                if (!webhookSent) {
+                    echo "❌ All webhook URLs failed. Dashboard might not be reachable."
                 }
             }
         }

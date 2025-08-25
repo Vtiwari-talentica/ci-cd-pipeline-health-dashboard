@@ -1,0 +1,119 @@
+pipeline {
+    agent any
+    
+    stages {
+        stage('Debug Network') {
+            steps {
+                script {
+                    echo "🔍 Testing network connectivity..."
+                    
+                    // Test basic connectivity
+                    try {
+                        sh 'curl --version'
+                        echo "✅ curl is available"
+                    } catch (Exception e) {
+                        echo "❌ curl not available: ${e.getMessage()}"
+                    }
+                    
+                    // Test localhost connectivity
+                    try {
+                        def result = sh(
+                            script: 'curl -f http://localhost:8001/health --connect-timeout 5',
+                            returnStdout: true
+                        ).trim()
+                        echo "✅ Dashboard reachable: ${result}"
+                    } catch (Exception e) {
+                        echo "❌ Cannot reach dashboard on localhost: ${e.getMessage()}"
+                    }
+                    
+                    // Test alternative host IPs
+                    try {
+                        def result = sh(
+                            script: 'curl -f http://host.docker.internal:8001/health --connect-timeout 5',
+                            returnStdout: true
+                        ).trim()
+                        echo "✅ Dashboard reachable via host.docker.internal: ${result}"
+                    } catch (Exception e) {
+                        echo "❌ Cannot reach via host.docker.internal: ${e.getMessage()}"
+                    }
+                    
+                    // Test Docker bridge IP
+                    try {
+                        def result = sh(
+                            script: 'curl -f http://172.17.0.1:8001/health --connect-timeout 5',
+                            returnStdout: true
+                        ).trim()
+                        echo "✅ Dashboard reachable via Docker bridge: ${result}"
+                    } catch (Exception e) {
+                        echo "❌ Cannot reach via Docker bridge: ${e.getMessage()}"
+                    }
+                    
+                    // Get network info
+                    try {
+                        def netinfo = sh(
+                            script: 'ip route | head -5 || route -n | head -5 || netstat -rn | head -5',
+                            returnStdout: true
+                        ).trim()
+                        echo "📡 Network info: ${netinfo}"
+                    } catch (Exception e) {
+                        echo "⚠️ Could not get network info: ${e.getMessage()}"
+                    }
+                }
+            }
+        }
+        
+        stage('Test Simple Webhook') {
+            steps {
+                script {
+                    echo "📡 Testing webhook with simple payload..."
+                    
+                    def webhookData = [
+                        repository: [full_name: "test/debug"],
+                        workflow: [name: "debug-pipeline"],
+                        workflow_run: [
+                            id: 999,
+                            name: "debug-pipeline", 
+                            status: "completed",
+                            conclusion: "success",
+                            run_number: 999,
+                            created_at: "2025-08-25T09:30:00Z",
+                            updated_at: "2025-08-25T09:30:30Z",
+                            html_url: "http://localhost:8080/job/debug/999"
+                        ],
+                        action: "completed"
+                    ]
+                    
+                    def jsonPayload = groovy.json.JsonBuilder(webhookData).toString()
+                    echo "Payload: ${jsonPayload}"
+                    
+                    // Try different URLs
+                    def urls = [
+                        'http://localhost:8001/webhook/jenkins',
+                        'http://host.docker.internal:8001/webhook/jenkins', 
+                        'http://172.17.0.1:8001/webhook/jenkins'
+                    ]
+                    
+                    for (url in urls) {
+                        try {
+                            echo "Testing URL: ${url}"
+                            def response = sh(
+                                script: """
+                                    curl -X POST '${url}' \\
+                                    -H 'Content-Type: application/json' \\
+                                    -d '${jsonPayload}' \\
+                                    --connect-timeout 5 \\
+                                    --max-time 10
+                                """,
+                                returnStdout: true
+                            ).trim()
+                            echo "✅ SUCCESS with ${url}: ${response}"
+                            break
+                        } catch (Exception e) {
+                            echo "❌ FAILED with ${url}: ${e.getMessage()}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
