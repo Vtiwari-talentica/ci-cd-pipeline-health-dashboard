@@ -1,17 +1,65 @@
 # CI/CD Pipeline Health Dashboard
 
+# Dependencies and environments
 node_modules/
 .venv/
 .venv-1/
+
+# Python cache and artifacts
 *.pyc
 __pycache__/
-.DS_Store
-*.db
-*.sqlite
-.env
-dist/
-build/
 .pytest_cache/
 coverage/
 .coverage
+
+# Build artifacts
+dist/
+build/
+*.db
+*.sqlite
+
+# Environment and logs
+.env
 *.log
+
+# System files
+.DS_Store
+
+# Development and testing files (keep locally, don't push to repo)
+DEMO_VIDEO_SCRIPT.md
+demo.sh
+docker-compose.dev.yml
+docker-compose.jenkins.yml
+docker-compose.prod.yml
+docs/
+GITHUB_TESTING.md
+JENKINS_TESTING.md
+jenkins-job-config.xml
+jenkins-test-pipeline.sh
+Jenkinsfile.debug
+Jenkinsfile.example
+Jenkinsfile.simple
+Jenkinsfile.working
+Makefile
+PROJECT_STATUS.md
+setup-github.sh
+setup-jenkins-job.sh
+SUBMISSION_CHECKLIST.md
+test_alerts.py
+test_cicd_scenarios.py
+test-app/
+TESTING_GUIDE.md
+WEBHOOK_READY.md
+WEBHOOK_TESTING.md
+.env.sample
+
+# Keep only evaluation-required files:
+# - README.md
+# - prompot_logs.md
+# - Requirement_analysis_document.md
+# - tech_design_document.md
+# - backend/
+# - frontend/
+# - docker-compose.yml
+# - .github/
+# - Jenkinsfile (for Jenkins integration demo)
