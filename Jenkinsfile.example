@@ -1,0 +1,190 @@
+pipeline {
+    agent any
+    
+    parameters {
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['dev', 'staging', 'prod'],
+            description: 'Target environment'
+        )
+        booleanParam(
+            name: 'RUN_TESTS',
+            defaultValue: true,
+            description: 'Run test suite'
+        )
+        booleanParam(
+            name: 'SIMULATE_FAILURE',
+            defaultValue: false,
+            description: 'Simulate pipeline failure for testing'
+        )
+    }
+    
+    environment {
+        DASHBOARD_URL = "${env.DASHBOARD_URL ?: 'http://localhost:8001'}"
+        BUILD_START_TIME = sh(script: 'date +%s', returnStdout: true).trim()
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out source code...'
+                // In a real scenario, this would be:
+                // checkout scm
+                script {
+                    env.GIT_COMMIT = sh(script: 'git rev-parse HEAD || echo "unknown"', returnStdout: true).trim()
+                    env.GIT_BRANCH = sh(script: 'git branch --show-current || echo "main"', returnStdout: true).trim()
+                }
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                echo 'Building application...'
+                sh '''
+                    echo "Installing dependencies..."
+                    sleep 2
+                    echo "Compiling application..."
+                    sleep 3
+                    echo "Build completed successfully"
+                '''
+            }
+        }
+        
+        stage('Test') {
+            when {
+                expression { params.RUN_TESTS }
+            }
+            parallel {
+                stage('Unit Tests') {
+                    steps {
+                        echo 'Running unit tests...'
+                        sh '''
+                            echo "Starting unit test suite..."
+                            sleep 5
+                            echo "✅ All unit tests passed"
+                        '''
+                    }
+                }
+                stage('Integration Tests') {
+                    steps {
+                        echo 'Running integration tests...'
+                        sh '''
+                            echo "Starting integration test suite..."
+                            sleep 8
+                            if [ "${SIMULATE_FAILURE}" = "true" ]; then
+                                echo "❌ Integration test failed: Database connection timeout"
+                                exit 1
+                            fi
+                            echo "✅ All integration tests passed"
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Security Scan') {
+            steps {
+                echo 'Running security scan...'
+                sh '''
+                    echo "Scanning for vulnerabilities..."
+                    sleep 4
+                    echo "✅ No security issues found"
+                '''
+            }
+        }
+        
+        stage('Deploy') {
+            when {
+                anyOf {
+                    branch 'main'
+                    expression { params.ENVIRONMENT == 'prod' }
+                }
+            }
+            steps {
+                echo "Deploying to ${params.ENVIRONMENT}..."
+                sh '''
+                    echo "Preparing deployment package..."
+                    sleep 3
+                    echo "Deploying to target environment..."
+                    sleep 5
+                    echo "✅ Deployment completed successfully"
+                '''
+            }
+        }
+        
+        stage('Smoke Tests') {
+            when {
+                anyOf {
+                    branch 'main'
+                    expression { params.ENVIRONMENT != 'dev' }
+                }
+            }
+            steps {
+                echo 'Running smoke tests...'
+                sh '''
+                    echo "Testing critical application paths..."
+                    sleep 3
+                    echo "✅ Smoke tests passed"
+                '''
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                // Calculate build duration
+                def buildEndTime = sh(script: 'date +%s', returnStdout: true).trim()
+                def duration = (buildEndTime as Integer) - (env.BUILD_START_TIME as Integer)
+                
+                // Determine build status
+                def buildStatus = currentBuild.currentResult ?: 'UNKNOWN'
+                def dashboardStatus = buildStatus == 'SUCCESS' ? 'success' : 
+                                   buildStatus == 'FAILURE' ? 'failure' : 'cancelled'
+                
+                // Get timestamp in ISO format
+                def startTime = sh(script: 'date -d "@${BUILD_START_TIME}" -u +%Y-%m-%dT%H:%M:%SZ', returnStdout: true).trim()
+                def endTime = sh(script: 'date -u +%Y-%m-%dT%H:%M:%SZ', returnStdout: true).trim()
+                
+                // Prepare logs summary
+                def logsSummary = "Jenkins pipeline completed with status: ${buildStatus}"
+                if (buildStatus == 'FAILURE') {
+                    logsSummary += ". Check console output for details."
+                }
+                
+                // Send webhook to dashboard
+                def payload = [
+                    pipeline: env.JOB_NAME ?: 'jenkins-pipeline',
+                    repo: env.JOB_NAME ?: 'jenkins-project',
+                    branch: env.GIT_BRANCH ?: 'main',
+                    status: dashboardStatus,
+                    started_at: startTime,
+                    completed_at: endTime,
+                    duration_seconds: duration,
+                    url: env.BUILD_URL ?: "http://jenkins.example.com/job/${env.JOB_NAME}/${env.BUILD_NUMBER}",
+                    logs: logsSummary
+                ]
+                
+                def payloadJson = writeJSON returnText: true, json: payload
+                
+                sh """
+                    curl -X POST "${DASHBOARD_URL}/ingest/jenkins" \\
+                         -H "Content-Type: application/json" \\
+                         -H "User-Agent: Jenkins/${env.JENKINS_VERSION}" \\
+                         -d '${payloadJson}' || echo "Failed to send webhook to dashboard"
+                """
+            }
+        }
+        success {
+            echo '🎉 Pipeline completed successfully!'
+            // Additional success notifications could go here
+        }
+        failure {
+            echo '❌ Pipeline failed!'
+            // Additional failure notifications could go here
+        }
+        unstable {
+            echo '⚠️ Pipeline completed with warnings'
+        }
+    }
+}

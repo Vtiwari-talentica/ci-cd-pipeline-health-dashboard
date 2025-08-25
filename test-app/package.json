@@ -1,0 +1,18 @@
+{
+  "name": "ci-dashboard-test-app",
+  "version": "1.0.0",
+  "description": "Simple test application for CI/CD dashboard testing",
+  "main": "app.js",
+  "scripts": {
+    "test": "node test.js",
+    "test:ci": "npm test",
+    "build": "echo 'Building application...' && sleep 2 && echo 'Build completed!'",
+    "lint": "echo 'Linting code...' && sleep 1",
+    "start": "node app.js"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  backend:
+    build: 
+      context: ./backend
+      target: production
+    container_name: ci-dashboard-backend-dev
+    env_file: .env
+    ports:
+      - "${BACKEND_PORT:-8001}:8001"
+    volumes:
+      - ./backend:/app
+      - dev_db_data:/app/data
+    networks:
+      - dashboard-dev-network
+    environment:
+      - SQLALCHEMY_DATABASE_URL=sqlite:///./data/dashboard.db
+      - PYTHONPATH=/app
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build: 
+      context: ./frontend
+      target: development
+    container_name: ci-dashboard-frontend-dev
+    env_file: .env
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.js:/app/vite.config.js
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - dashboard-dev-network
+    environment:
+      - VITE_BACKEND_URL=http://localhost:8001
+
+volumes:
+  dev_db_data:
+    driver: local
+
+networks:
+  dashboard-dev-network:
+    driver: bridge

@@ -1,0 +1,17 @@
+# CI/CD Pipeline Health Dashboard
+
+node_modules/
+.venv/
+.venv-1/
+*.pyc
+__pycache__/
+.DS_Store
+*.db
+*.sqlite
+.env
+dist/
+build/
+.pytest_cache/
+coverage/
+.coverage
+*.log
