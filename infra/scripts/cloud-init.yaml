@@ -1,0 +1,291 @@
+#cloud-config
+# CI/CD Dashboard Auto-Deployment Script
+# Generated with AI assistance for streamlined cloud deployment
+
+# System updates and package installation
+package_update: true
+package_upgrade: true
+
+packages:
+  - docker.io
+  - docker-compose
+  - git
+  - curl
+  - wget
+  - unzip
+  - jq
+  - htop
+  - vim
+  - awscli
+  - postgresql-client
+
+# Create application user
+users:
+  - name: dashboard
+    groups: docker
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    home: /home/dashboard
+
+# Create directories
+runcmd:
+  # Configure Docker
+  - systemctl enable docker
+  - systemctl start docker
+  - usermod -aG docker ubuntu
+  - usermod -aG docker dashboard
+
+  # Create application directory
+  - mkdir -p /opt/ci-cd-dashboard
+  - chown dashboard:dashboard /opt/ci-cd-dashboard
+
+  # Download application code
+  - cd /opt/ci-cd-dashboard
+  - git clone https://github.com/your-username/ci-cd-pipeline-health-dashboard.git .
+  - chown -R dashboard:dashboard /opt/ci-cd-dashboard
+
+  # Configure environment variables
+  - |
+    cat > /opt/ci-cd-dashboard/.env << EOF
+    # Database Configuration
+    DATABASE_URL=postgresql://${db_username}:${db_password}@${db_host}:5432/${db_name}
+    DB_HOST=${db_host}
+    DB_NAME=${db_name}
+    DB_USER=${db_username}
+    DB_PASSWORD=${db_password}
+    DB_PORT=5432
+
+    # Application Configuration
+    ENVIRONMENT=${environment}
+    API_BASE_URL=http://localhost:8001
+    FRONTEND_URL=http://localhost:5173
+
+    # GitHub Configuration (to be updated by user)
+    GITHUB_TOKEN=your_github_token_here
+    GITHUB_OWNER=your_github_username
+    GITHUB_REPO=your_repo_name
+
+    # Jenkins Configuration (to be updated by user)
+    JENKINS_URL=http://your-jenkins-url
+    JENKINS_USER=your_jenkins_user
+    JENKINS_TOKEN=your_jenkins_token
+
+    # WebSocket Configuration
+    WS_PORT=8001
+    WS_PATH=/ws
+
+    # Security Configuration
+    SECRET_KEY=your_secret_key_here
+    CORS_ORIGINS=*
+
+    # Logging Configuration
+    LOG_LEVEL=INFO
+    LOG_FORMAT=json
+    EOF
+
+  # Set proper permissions
+  - chown dashboard:dashboard /opt/ci-cd-dashboard/.env
+  - chmod 600 /opt/ci-cd-dashboard/.env
+
+  # Create systemd service for the application
+  - |
+    cat > /etc/systemd/system/ci-cd-dashboard.service << EOF
+    [Unit]
+    Description=CI/CD Pipeline Health Dashboard
+    After=docker.service
+    Requires=docker.service
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=true
+    WorkingDirectory=/opt/ci-cd-dashboard
+    ExecStart=/usr/bin/docker-compose up -d
+    ExecStop=/usr/bin/docker-compose down
+    ExecReload=/usr/bin/docker-compose restart
+    User=dashboard
+    Group=dashboard
+    Environment=PATH=/usr/bin:/usr/local/bin
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+
+  # Create health check script
+  - |
+    cat > /opt/ci-cd-dashboard/health-check.sh << 'EOF'
+    #!/bin/bash
+    # Health check script for CI/CD Dashboard
+
+    set -e
+
+    echo "Checking application health..."
+
+    # Check if containers are running
+    if ! docker-compose ps | grep -q "Up"; then
+        echo "ERROR: Some containers are not running"
+        docker-compose ps
+        exit 1
+    fi
+
+    # Check frontend health
+    if ! curl -f http://localhost:5173 > /dev/null 2>&1; then
+        echo "ERROR: Frontend is not responding"
+        exit 1
+    fi
+
+    # Check backend health
+    if ! curl -f http://localhost:8001/health > /dev/null 2>&1; then
+        echo "ERROR: Backend is not responding"
+        exit 1
+    fi
+
+    echo "All services are healthy!"
+    EOF
+
+  - chmod +x /opt/ci-cd-dashboard/health-check.sh
+  - chown dashboard:dashboard /opt/ci-cd-dashboard/health-check.sh
+
+  # Start the application
+  - cd /opt/ci-cd-dashboard
+  - sudo -u dashboard docker-compose pull
+  - sudo -u dashboard docker-compose up -d
+
+  # Enable and start the service
+  - systemctl daemon-reload
+  - systemctl enable ci-cd-dashboard.service
+
+  # Setup log rotation
+  - |
+    cat > /etc/logrotate.d/ci-cd-dashboard << EOF
+    /opt/ci-cd-dashboard/logs/*.log {
+        daily
+        missingok
+        rotate 7
+        compress
+        notifempty
+        create 644 dashboard dashboard
+        postrotate
+            systemctl reload ci-cd-dashboard.service
+        endscript
+    }
+    EOF
+
+  # Configure CloudWatch agent (if needed)
+  - |
+    if [ "${environment}" = "prod" ]; then
+        wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
+        dpkg -i amazon-cloudwatch-agent.deb
+        
+        cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << EOF
+        {
+            "logs": {
+                "logs_collected": {
+                    "files": {
+                        "collect_list": [
+                            {
+                                "file_path": "/opt/ci-cd-dashboard/logs/app.log",
+                                "log_group_name": "/aws/ec2/ci-cd-dashboard-${environment}",
+                                "log_stream_name": "{instance_id}/app.log"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+        EOF
+        
+        /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+    fi
+
+  # Setup monitoring cron job
+  - |
+    cat > /etc/cron.d/dashboard-health << EOF
+    # Health check every 5 minutes
+    */5 * * * * dashboard /opt/ci-cd-dashboard/health-check.sh >> /var/log/dashboard-health.log 2>&1
+    EOF
+
+  # Create startup notification
+  - |
+    cat > /tmp/startup-complete.txt << EOF
+    CI/CD Pipeline Health Dashboard deployment completed successfully!
+    
+    Environment: ${environment}
+    Database Host: ${db_host}
+    
+    Application URLs:
+    - Frontend: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):5173
+    - Backend API: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8001
+    - API Documentation: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8001/docs
+    
+    Next Steps:
+    1. Update .env file with your GitHub and Jenkins credentials
+    2. Configure your CI/CD tools to send webhooks to this instance
+    3. Access the dashboard to monitor your pipelines
+    
+    For troubleshooting:
+    - Check logs: sudo journalctl -u ci-cd-dashboard.service
+    - Check containers: docker-compose ps
+    - Health check: /opt/ci-cd-dashboard/health-check.sh
+    EOF
+
+# Write files
+write_files:
+  - path: /opt/ci-cd-dashboard/docker-compose.yml
+    content: |
+      version: '3.8'
+      
+      services:
+        backend:
+          build:
+            context: ./backend
+            dockerfile: Dockerfile
+          ports:
+            - "8001:8001"
+          environment:
+            - DATABASE_URL=$${DATABASE_URL}
+            - ENVIRONMENT=$${ENVIRONMENT}
+            - GITHUB_TOKEN=$${GITHUB_TOKEN}
+            - JENKINS_URL=$${JENKINS_URL}
+            - JENKINS_USER=$${JENKINS_USER}
+            - JENKINS_TOKEN=$${JENKINS_TOKEN}
+          volumes:
+            - ./logs:/app/logs
+          restart: unless-stopped
+          healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+      
+        frontend:
+          build:
+            context: ./frontend
+            dockerfile: Dockerfile
+          ports:
+            - "5173:5173"
+          environment:
+            - VITE_API_BASE_URL=http://localhost:8001
+          depends_on:
+            - backend
+          restart: unless-stopped
+          healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:5173"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+      
+      volumes:
+        logs:
+          driver: local
+    owner: dashboard:dashboard
+    permissions: '0644'
+
+# Final commands
+final_message: |
+  CI/CD Pipeline Health Dashboard has been deployed!
+  
+  The application is starting up and will be available shortly at:
+  - Frontend: http://your-load-balancer-dns:5173
+  - Backend API: http://your-load-balancer-dns:8001
+  
+  Please check the startup status: tail -f /var/log/cloud-init-output.log
